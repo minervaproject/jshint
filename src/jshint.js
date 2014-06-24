@@ -4548,6 +4548,10 @@ var JSHINT = (function () {
 
   // The actual JSHINT function itself.
   var itself = function (s, o, g) {
+    var JSXTransformer = require("react-tools");
+    if (-1 !== s.indexOf('React.DOM')) {
+      s = JSXTransformer.transform(s);
+    }
     var i, k, x;
     var optionKeys;
     var newOptionObj = {};
