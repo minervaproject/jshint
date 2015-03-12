@@ -66,6 +66,22 @@ exports.confusingOps = function (test) {
   test.done();
 };
 
+exports.division = function (test) {
+  var run;
+  var code = [
+    'var a=4,b=4,i=2;',
+    'a/=b+2;',
+    'a/=b/2;',
+    'a/=b/i;',
+    '/*jshint expr:true*/',
+    '/=b/i;' // valid standalone RegExp expression
+  ];
+
+  run = TestRun(test);
+  run.test(code);
+
+  test.done();
+};
 
 exports.plusplus = function (test) {
   var run;
@@ -169,6 +185,8 @@ exports.options = function (test) {
     "/*jshint d:no */",
     "/*global xxx*/",
     "xxx = 2;",
+    "/*jshint relaxing: true */",
+    "/*jshint toString: true */",
   ];
 
   var run = TestRun(test)
@@ -181,13 +199,69 @@ exports.options = function (test) {
     .addError(9, "Expected a small integer or 'false' and instead saw '300.4'.")
     .addError(10, "Expected a small integer or 'false' and instead saw '0'.")
     .addError(13, "Bad option: 'd'.")
-    .addError(15, "Read only.");
+    .addError(15, "Read only.")
+    .addError(16, "Bad option: 'relaxing'.")
+    .addError(17, "Bad option: 'toString'.");
   run.test(code, {es3: true});
   run.test(code, {}); // es5
   run.test(code, {esnext: true});
   run.test(code, {moz: true});
 
   TestRun(test).test(fs.readFileSync(__dirname + "/fixtures/gh988.js", "utf8"));
+
+  test.done();
+};
+
+exports["jshint option comments single line"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-1.js", "utf8");
+
+  TestRun(test).test(src);
+
+  test.done();
+};
+
+exports["jshint option comments single line, leading and trailing space"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-2.js", "utf8");
+
+  TestRun(test).test(src);
+
+  test.done();
+};
+
+exports["jshint option comments multi line"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-3.js", "utf8");
+
+  TestRun(test).test(src);
+
+  test.done();
+};
+
+exports["jshint option comments multi line, leading and trailing space"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-4.js", "utf8");
+
+  TestRun(test)
+    .addError(4, "'foo' is not defined.")
+    .test(src);
+
+  test.done();
+};
+
+exports["jshint option comments multi line/option"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-5.js", "utf8");
+
+  TestRun(test)
+    .addError(3, "'foo' is not defined.")
+    .test(src);
+
+  test.done();
+};
+
+exports["jshint option comments multi line/option, leading and trailing space"] = function (test) {
+  var src = fs.readFileSync(__dirname + "/fixtures/gh1768-6.js", "utf8");
+
+  TestRun(test)
+    .addError(4, "'foo' is not defined.")
+    .test(src);
 
   test.done();
 };
@@ -235,7 +309,14 @@ exports.numbers = function (test) {
     "var g = 0033;",
     "var h = 3.;",
     "var i = 3.7.toString();",
-    "var j = 1e-10;" // GH-821
+    "var j = 1e-10;", // GH-821
+    "var k = 0o1234567;",
+    "var l = 0b101;",
+    "var m = 0x;",
+    "var n = 09;",
+    "var o = 1e-A;",
+    "var p = 1/;",
+    "var q = 1x;"
   ];
 
   TestRun(test)
@@ -247,6 +328,17 @@ exports.numbers = function (test) {
     .addError(7, "Don't use extra leading zeros '0033'.")
     .addError(8, "A trailing decimal point can be confused with a dot: '3.'.")
     .addError(9, "A dot following a number can be confused with a decimal point.")
+    .addError(11, "'Octal integer literal' is only available in ES6 (use esnext option).")
+    .addError(12, "'Binary integer literal' is only available in ES6 (use esnext option).")
+    .addError(13, "Bad number '0x'.")
+    .addError(15, "Unexpected '1'.")
+    .addError(16, "Expected an identifier and instead saw ';'.")
+    .addError(16, "Expected an identifier and instead saw 'var'.")
+    .addError(16, "Missing semicolon.")
+    .addError(17, "Unexpected '1'.")
+    .addError(17, "Unexpected early end of program.")
+    .addError(17, "Expected an identifier and instead saw '(end)'.")
+    .addError(17, "Missing semicolon.")
     .test(code, {es3: true});
 
   // Octals are prohibited in strict mode.
@@ -268,6 +360,20 @@ exports.numbers = function (test) {
       "var b = 1 + .3;",
     ]);
 
+  TestRun(test)
+    .addError(5, "Missing semicolon.")
+    .addError(5, "Expected an assignment or function call and instead saw an expression.")
+    .addError(6, "Missing semicolon.")
+    .addError(6, "Expected an assignment or function call and instead saw an expression.")
+    .test([
+      "var a = 0o1234567;",
+      "var b = 0O1234567;",
+      "var c = 0b101;",
+      "var d = 0B101;",
+      "var e = 0o12345678;",
+      "var f = 0b1012;",
+    ], {esnext: true});
+
   test.done();
 };
 
@@ -276,7 +382,7 @@ exports.comments = function (test) {
     "/*",
     "/* nested */",
     "*/",
-    "/* unclosed ...",
+    "/* unclosed ..",
   ];
 
   var run = TestRun(test)
@@ -354,16 +460,53 @@ exports.regexp = function (test) {
   run.test(code, {moz: true});
 
 
+  // Pre Regular Expression Punctuation
+  //  (See: token method, create function in lex.js)
+  //
+  // "."
+  TestRun(test)
+    .addError(1, "A trailing decimal point can be confused with a dot: '10.'.")
+    .test("var y = 10. / 1;", {es3: true});
+  TestRun(test)
+    .addError(1, "A trailing decimal point can be confused with a dot: '10.'.")
+    .test("var y = 10. / 1;", {}); // es5
+  TestRun(test)
+    .addError(1, "A trailing decimal point can be confused with a dot: '10.'.")
+    .test("var y = 10. / 1;", {esnext: true});
+  TestRun(test)
+    .addError(1, "A trailing decimal point can be confused with a dot: '10.'.")
+    .test("var y = 10. / 1;", {moz: true});
+
+  // ")"
   TestRun(test).test("var y = Math.sqrt(16) / 180;", {es3: true});
   TestRun(test).test("var y = Math.sqrt(16) / 180;", {}); // es5
   TestRun(test).test("var y = Math.sqrt(16) / 180;", {esnext: true});
   TestRun(test).test("var y = Math.sqrt(16) / 180;", {moz: true});
 
-  // GH-803
+  // "~"
+  TestRun(test).test("var y = Math.sqrt(16) / 180;", {es3: true});
+  TestRun(test).test("var y = Math.sqrt(16) / 180;", {}); // es5
+  TestRun(test).test("var y = Math.sqrt(16) / 180;", {esnext: true});
+  TestRun(test).test("var y = Math.sqrt(16) / 180;", {moz: true});
+
+
+  // "]" (GH-803)
   TestRun(test).test("var x = [1]; var y = x[0] / 180;", {es3: true});
   TestRun(test).test("var x = [1]; var y = x[0] / 180;", {}); // es5
   TestRun(test).test("var x = [1]; var y = x[0] / 180;", {esnext: true});
   TestRun(test).test("var x = [1]; var y = x[0] / 180;", {moz: true});
+
+  // "++" (GH-1787)
+  TestRun(test).test("var a = 1; var b = a++ / 10;", {es3: true});
+  TestRun(test).test("var a = 1; var b = a++ / 10;", {}); // es5
+  TestRun(test).test("var a = 1; var b = a++ / 10;", {esnext: true});
+  TestRun(test).test("var a = 1; var b = a++ / 10;", {moz: true});
+
+  // "--" (GH-1787)
+  TestRun(test).test("var a = 1; var b = a-- / 10;", {es3: true});
+  TestRun(test).test("var a = 1; var b = a-- / 10;", {}); // es5
+  TestRun(test).test("var a = 1; var b = a-- / 10;", {esnext: true});
+  TestRun(test).test("var a = 1; var b = a-- / 10;", {moz: true});
 
   test.done();
 };
@@ -391,6 +534,11 @@ exports.testRegexRegressions = function (test) {
   TestRun(test).test("var exp = /function(.*){/gi;", {esnext: true});
   TestRun(test).test("var exp = /function(.*){/gi;", {moz: true});
 
+  TestRun(test).test("var exp = /\\[\\]/;", {es3: true});
+  TestRun(test).test("var exp = /\\[\\]/;", {}); // es5
+  TestRun(test).test("var exp = /\\[\\]/;", {esnext: true});
+  TestRun(test).test("var exp = /\\[\\]/;", {moz: true});
+
   test.done();
 };
 
@@ -399,16 +547,32 @@ exports.strings = function (test) {
     "var a = '\u0012\\r';",
     "var b = \'\\g\';",
     "var c = '\\u0022\\u0070\\u005C';",
+    "var d = '\\\\';",
     "var e = '\\x6b..\\x6e';",
-    "var f = 'ax"
+    "var f = '\\b\\f\\n\\/';",
+    "var g = 'ax",
   ];
 
   var run = TestRun(test)
     .addError(1, "Control character in string: <non-printable>.", {character: 10})
     .addError(1, "This character may get silently deleted by one or more browsers.")
-    .addError(2, "Bad or unnecessary escaping.")
-    .addError(5, "Unclosed string.")
-    .addError(5, "Missing semicolon.");
+    .addError(7, "Unclosed string.")
+    .addError(7, "Missing semicolon.");
+  run.test(code, {es3: true});
+  run.test(code, {}); // es5
+  run.test(code, {esnext: true});
+  run.test(code, {moz: true});
+
+  test.done();
+};
+
+exports.badStrings = function (test) {
+  var code = [
+    "var a = '\\uNOTHEX';"
+  ];
+
+  var run = TestRun(test)
+    .addError(1, "Unexpected 'uNOTH'.");
   run.test(code, {es3: true});
   run.test(code, {}); // es5
   run.test(code, {esnext: true});
@@ -469,6 +633,206 @@ exports.jsonMode = function (test) {
 
   test.done();
 };
+
+exports.deepJSON = function (test) {
+  var code = [
+    '{',
+    '  "key" : {',
+    '    "deep" : [',
+    '      "value",',
+    '      { "num" : 123, "array": [] }',
+    '    ]',
+    '  },',
+    '  "single": ["x"],',
+    '  "negative": -1.23e2',
+    '}'
+  ];
+
+  var run = TestRun(test);
+
+  run.test(code, {multistr: true, es3: true});
+  run.test(code, {multistr: true}); // es5
+  run.test(code, {multistr: true, esnext: true});
+  run.test(code, {multistr: true, moz: true});
+
+  test.done();
+}
+
+exports.badJSON = function (test) {
+  var objTrailingComma = [
+    '{ "key" : "value", }',
+  ];
+
+  var run1 = TestRun(test)
+    .addError(1, "Unexpected comma.");
+
+  run1.test(objTrailingComma, {multistr: true, es3: true});
+  run1.test(objTrailingComma, {multistr: true}); // es5
+  run1.test(objTrailingComma, {multistr: true, esnext: true});
+  run1.test(objTrailingComma, {multistr: true, moz: true});
+
+  var arrayTrailingComma = [
+    '{ "key" : [,] }',
+  ];
+
+  var run2 = TestRun(test)
+    .addError(1, "Illegal comma.")
+    .addError(1, "Expected a JSON value.")
+    .addError(1, "Unexpected comma.");
+
+  run2.test(arrayTrailingComma, {multistr: true, es3: true});
+  run2.test(arrayTrailingComma, {multistr: true}); // es5
+  run2.test(arrayTrailingComma, {multistr: true, esnext: true});
+  run2.test(arrayTrailingComma, {multistr: true, moz: true});
+
+  var objMissingComma = [
+    '{ "k1":"v1" "k2":"v2" }',
+  ];
+
+  var run3 = TestRun(test)
+    .addError(1, "Expected '}' and instead saw 'k2'.")
+    .addError(1, "Expected '(end)' and instead saw ':'.");
+
+  run3.test(objMissingComma, {multistr: true, es3: true});
+  run3.test(objMissingComma, {multistr: true}); // es5
+  run3.test(objMissingComma, {multistr: true, esnext: true});
+  run3.test(objMissingComma, {multistr: true, moz: true});
+
+  var arrayMissingComma = [
+    '[ "v1" "v2" ]',
+  ];
+
+  var run4 = TestRun(test)
+    .addError(1, "Expected ']' and instead saw 'v2'.")
+    .addError(1, "Expected '(end)' and instead saw ']'.");
+
+  run4.test(arrayMissingComma, {multistr: true, es3: true});
+  run4.test(arrayMissingComma, {multistr: true}); // es5
+  run4.test(arrayMissingComma, {multistr: true, esnext: true});
+  run4.test(arrayMissingComma, {multistr: true, moz: true});
+
+  var objDoubleComma = [
+    '{ "k1":"v1",, "k2":"v2" }',
+  ];
+
+  var run5 = TestRun(test)
+    .addError(1, "Illegal comma.")
+    .addError(1, "Expected ':' and instead saw 'k2'.")
+    .addError(1, "Expected a JSON value.")
+    .addError(1, "Expected '}' and instead saw ':'.")
+    .addError(1, "Expected '(end)' and instead saw 'v2'.");
+
+  run5.test(objDoubleComma, {multistr: true, es3: true});
+  run5.test(objDoubleComma, {multistr: true}); // es5
+  run5.test(objDoubleComma, {multistr: true, esnext: true});
+  run5.test(objDoubleComma, {multistr: true, moz: true});
+
+  var arrayDoubleComma = [
+    '[ "v1",, "v2" ]',
+  ];
+
+  var run6 = TestRun(test)
+    .addError(1, "Illegal comma.")
+    .addError(1, "Expected a JSON value.");
+
+  run6.test(arrayDoubleComma, {multistr: true, es3: true});
+  run6.test(arrayDoubleComma, {multistr: true}); // es5
+  run6.test(arrayDoubleComma, {multistr: true, esnext: true});
+  run6.test(arrayDoubleComma, {multistr: true, moz: true});
+
+  var objUnclosed = [
+    '{ "k1":"v1"',
+  ];
+
+  var run7 = TestRun(test)
+    .addError(1, "Expected '}' and instead saw ''.");
+
+  run7.test(objUnclosed, {multistr: true, es3: true});
+  run7.test(objUnclosed, {multistr: true}); // es5
+  run7.test(objUnclosed, {multistr: true, esnext: true});
+  run7.test(objUnclosed, {multistr: true, moz: true});
+
+  var arrayUnclosed = [
+    '[ "v1"',
+  ];
+
+  var run8 = TestRun(test)
+    .addError(1, "Expected ']' and instead saw ''.");
+
+  run8.test(arrayUnclosed, {multistr: true, es3: true});
+  run8.test(arrayUnclosed, {multistr: true}); // es5
+  run8.test(arrayUnclosed, {multistr: true, esnext: true});
+  run8.test(arrayUnclosed, {multistr: true, moz: true});
+
+  var objUnclosed2 = [
+    '{',
+  ];
+
+  var run9 = TestRun(test)
+    .addError(1, "Missing '}' to match '{' from line 1.")
+    .addError(1, "Expected ':' and instead saw ''.")
+    .addError(1, "Expected a JSON value.")
+    .addError(1, "Expected '}' and instead saw ''.");
+
+  run9.test(objUnclosed2, {multistr: true, es3: true});
+  run9.test(objUnclosed2, {multistr: true}); // es5
+  run9.test(objUnclosed2, {multistr: true, esnext: true});
+  run9.test(objUnclosed2, {multistr: true, moz: true});
+
+  var arrayUnclosed2 = [
+    '[',
+  ];
+
+  var run10 = TestRun(test)
+    .addError(1, "Missing ']' to match '[' from line 1.")
+    .addError(1, "Expected a JSON value.")
+    .addError(1, "Expected ']' and instead saw ''.");
+
+  run10.test(arrayUnclosed2, {multistr: true, es3: true});
+  run10.test(arrayUnclosed2, {multistr: true}); // es5
+  run10.test(arrayUnclosed2, {multistr: true, esnext: true});
+  run10.test(arrayUnclosed2, {multistr: true, moz: true});
+
+  var objDupKeys = [
+    '{ "k1":"v1", "k1":"v1" }',
+  ];
+
+  var run11 = TestRun(test)
+    .addError(1, "Duplicate key 'k1'.");
+
+  run11.test(objDupKeys, {multistr: true, es3: true});
+  run11.test(objDupKeys, {multistr: true}); // es5
+  run11.test(objDupKeys, {multistr: true, esnext: true});
+  run11.test(objDupKeys, {multistr: true, moz: true});
+
+  var objBadKey = [
+    '{ k1:"v1" }',
+  ];
+
+  var run12 = TestRun(test)
+    .addError(1, "Expected a string and instead saw k1.");
+
+  run12.test(objBadKey, {multistr: true, es3: true});
+  run12.test(objBadKey, {multistr: true}); // es5
+  run12.test(objBadKey, {multistr: true, esnext: true});
+  run12.test(objBadKey, {multistr: true, moz: true});
+
+  var objBadValue = [
+    '{ "noRegexpInJSON": /$^/ }',
+  ];
+
+  var run13 = TestRun(test)
+    .addError(1, "Expected a JSON value.")
+    .addError(1, "Expected '}' and instead saw '/$^/'.")
+    .addError(1, "Expected '(end)' and instead saw '}'.");
+
+  run13.test(objBadValue, {multistr: true, es3: true});
+  run13.test(objBadValue, {multistr: true}); // es5
+  run13.test(objBadValue, {multistr: true, esnext: true});
+  run13.test(objBadValue, {multistr: true, moz: true});
+
+  test.done();
+}
 
 exports.comma = function (test) {
   var src = fs.readFileSync(__dirname + "/fixtures/comma.js", "utf8");
@@ -629,6 +993,36 @@ exports.testIdentifiers = function (test) {
   test.done();
 };
 
+exports.badIdentifiers = function (test) {
+  var badUnicode = [
+    "var \\uNOTHEX;"
+  ];
+
+  var run = TestRun(test)
+    .addError(1, "Unexpected '\\'.")
+    .addError(1, "Expected an identifier and instead saw ''.")
+    .addError(1, "Missing semicolon.");
+  run.test(badUnicode, {es3: true});
+  run.test(badUnicode, {}); // es5
+  run.test(badUnicode, {esnext: true});
+  run.test(badUnicode, {moz: true});
+
+  var invalidUnicodeIdent = [
+    "var \\u0000;"
+  ];
+
+  var run = TestRun(test)
+    .addError(1, "Unexpected '\\'.")
+    .addError(1, "Expected an identifier and instead saw ''.")
+    .addError(1, "Missing semicolon.");
+  run.test(invalidUnicodeIdent, {es3: true});
+  run.test(invalidUnicodeIdent, {}); // es5
+  run.test(invalidUnicodeIdent, {esnext: true});
+  run.test(invalidUnicodeIdent, {moz: true});
+
+  test.done();
+};
+
 exports["regression for GH-878"] = function (test) {
   var src = fs.readFileSync(__dirname + "/fixtures/gh878.js", "utf8");
 
@@ -665,7 +1059,7 @@ exports.testHtml = function (test) {
   test.done();
 };
 
-exports["test: destructuring var in function scope"] = function (test) {
+exports["destructuring var in function scope"] = function (test) {
   var code = [
     "function foobar() {",
     "  var [ a, b, c ] = [ 1, 2, 3 ];",
@@ -692,8 +1086,6 @@ exports["test: destructuring var in function scope"] = function (test) {
     .addError(9,  "'a' is already defined.")
     .addError(9,  "'bar' is already defined.")
     .addError(10,  "Expected an identifier and instead saw '1'.")
-    .addError(10,  "Expected ',' and instead saw '1'.")
-    .addError(10,  "Expected an identifier and instead saw ']'.")
     .addError(11, "Expected ',' and instead saw ';'.")
     .addError(11, "'a' is already defined.")
     .addError(11, "'b' is already defined.")
@@ -721,7 +1113,7 @@ exports["test: destructuring var in function scope"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring var as moz"] = function (test) {
+exports["destructuring var as moz"] = function (test) {
   var code = [
     "var [ a, b, c ] = [ 1, 2, 3 ];",
     "var [ a ] = [ 1 ];",
@@ -748,7 +1140,7 @@ exports["test: destructuring var as moz"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring var as esnext"] = function (test) {
+exports["destructuring var as esnext"] = function (test) {
   var code = [
     "var [ a, b, c ] = [ 1, 2, 3 ];",
     "var [ a ] = [ 1 ];",
@@ -775,7 +1167,7 @@ exports["test: destructuring var as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring var as es5"] = function (test) {
+exports["destructuring var as es5"] = function (test) {
   var code = [
     "var [ a, b, c ] = [ 1, 2, 3 ];",
     "var [ a ] = [ 1 ];",
@@ -813,7 +1205,7 @@ exports["test: destructuring var as es5"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring var as legacy JS"] = function (test) {
+exports["destructuring var as legacy JS"] = function (test) {
   var code = [
     "var [ a, b, c ] = [ 1, 2, 3 ];",
     "var [ a ] = [ 1 ];",
@@ -851,7 +1243,7 @@ exports["test: destructuring var as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring var errors"] = function (test) {
+exports["destructuring var errors"] = function (test) {
   var code = [
     "var [ a, b, c ] = [ 1, 2, 3 ];",
     "var [ a ] = [ 1 ];",
@@ -868,8 +1260,6 @@ exports["test: destructuring var errors"] = function (test) {
 
   TestRun(test)
     .addError(9,  "Expected an identifier and instead saw '1'.")
-    .addError(9,  "Expected ',' and instead saw '1'.")
-    .addError(9,  "Expected an identifier and instead saw ']'.")
     .addError(10, "Expected ',' and instead saw ';'.")
     .addError(11, "Expected ']' to match '[' from line 11 and instead saw ';'.")
     .addError(11, "Missing semicolon.")
@@ -891,7 +1281,7 @@ exports["test: destructuring var errors"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring const as moz"] = function (test) {
+exports["destructuring const as moz"] = function (test) {
   var code = [
     "const [ a, b, c ] = [ 1, 2, 3 ];",
     "const [ d ] = [ 1 ];",
@@ -929,7 +1319,7 @@ exports["test: destructuring const as moz"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring const as esnext"] = function (test) {
+exports["destructuring const as esnext"] = function (test) {
   var code = [
     "const [ a, b, c ] = [ 1, 2, 3 ];",
     "const [ d ] = [ 1 ];",
@@ -963,7 +1353,7 @@ exports["test: destructuring const as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring const as es5"] = function (test) {
+exports["destructuring const as es5"] = function (test) {
   var code = [
     "const [ a, b, c ] = [ 1, 2, 3 ];",
     "const [ d ] = [ 1 ];",
@@ -1015,7 +1405,7 @@ exports["test: destructuring const as es5"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring const as legacy JS"] = function (test) {
+exports["destructuring const as legacy JS"] = function (test) {
   var code = [
     "const [ a, b, c ] = [ 1, 2, 3 ];",
     "const [ d ] = [ 1 ];",
@@ -1067,7 +1457,7 @@ exports["test: destructuring const as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring const errors"] = function (test) {
+exports["destructuring const errors"] = function (test) {
   var code = [
     "const [ a, b, c ] = [ 1, 2, 3 ];",
     "const [ a, b, c ] = [ 1, 2, 3 ];",
@@ -1089,8 +1479,6 @@ exports["test: destructuring const errors"] = function (test) {
     .addError(2, "const 'b' has already been declared.")
     .addError(2, "const 'c' has already been declared.")
     .addError(3, "Expected an identifier and instead saw '1'.")
-    .addError(3, "Expected ',' and instead saw '1'.")
-    .addError(3, "Expected an identifier and instead saw ']'.")
     .addError(4, "Expected ',' and instead saw ';'.")
     .addError(5, "Expected ']' to match '[' from line 5 and instead saw ';'.")
     .addError(5, "Missing semicolon.")
@@ -1104,7 +1492,7 @@ exports["test: destructuring const errors"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring globals as moz"] = function (test) {
+exports["destructuring globals as moz"] = function (test) {
   var code = [
     "var a, b, c, d, h, w, o;",
     "[ a, b, c ] = [ 1, 2, 3 ];",
@@ -1123,7 +1511,7 @@ exports["test: destructuring globals as moz"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring globals as esnext"] = function (test) {
+exports["destructuring globals as esnext"] = function (test) {
   var code = [
     "var a, b, c, d, h, w, o;",
     "[ a, b, c ] = [ 1, 2, 3 ];",
@@ -1142,7 +1530,7 @@ exports["test: destructuring globals as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring globals as es5"] = function (test) {
+exports["destructuring globals as es5"] = function (test) {
   var code = [
     "var a, b, c, d, h, w, o;",
     "[ a, b, c ] = [ 1, 2, 3 ];",
@@ -1168,7 +1556,7 @@ exports["test: destructuring globals as es5"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring globals as legacy JS"] = function (test) {
+exports["destructuring globals as legacy JS"] = function (test) {
   var code = [
     "var a, b, c, d, h, w, o;",
     "[ a, b, c ] = [ 1, 2, 3 ];",
@@ -1194,7 +1582,7 @@ exports["test: destructuring globals as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring globals with syntax error"] = function (test) {
+exports["destructuring globals with syntax error"] = function (test) {
   var code = [
     "var a, b, c;",
     "[ a ] = [ z ];",
@@ -1231,7 +1619,7 @@ exports["test: destructuring globals with syntax error"] = function (test) {
   test.done();
 };
 
-exports["test: destructuring assign of empty values as moz"] = function (test) {
+exports["destructuring assign of empty values as moz"] = function (test) {
   var code = [
     "var [ a ] = [ 1, 2 ];",
     "var [ c, d ] = [ 1 ];",
@@ -1244,12 +1632,12 @@ exports["test: destructuring assign of empty values as moz"] = function (test) {
     .addError(2, "'d' is defined but never used.")
     .addError(3, "'e' is defined but never used.")
     .addError(3, "'f' is defined but never used.")
-    .test(code, {moz: true, unused: true, undef: true, laxcomma: true});
+    .test(code, {moz: true, unused: true, undef: true, laxcomma: true, elision: true});
 
   test.done();
 };
 
-exports["test: destructuring assign of empty values as esnext"] = function (test) {
+exports["destructuring assign of empty values as esnext"] = function (test) {
   var code = [
     "var [ a ] = [ 1, 2 ];",
     "var [ c, d ] = [ 1 ];",
@@ -1262,12 +1650,12 @@ exports["test: destructuring assign of empty values as esnext"] = function (test
     .addError(2, "'d' is defined but never used.")
     .addError(3, "'e' is defined but never used.")
     .addError(3, "'f' is defined but never used.")
-    .test(code, {esnext: true, unused: true, undef: true});
+    .test(code, {esnext: true, unused: true, undef: true, elision: true});
 
   test.done();
 };
 
-exports["test: destructuring assign of empty values as es5"] = function (test) {
+exports["destructuring assign of empty values as es5"] = function (test) {
   var code = [
     "var [ a ] = [ 1, 2 ];",
     "var [ c, d ] = [ 1 ];",
@@ -1283,12 +1671,12 @@ exports["test: destructuring assign of empty values as es5"] = function (test) {
     .addError(3, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
     .addError(3, "'e' is defined but never used.")
     .addError(3, "'f' is defined but never used.")
-    .test(code, {unused: true, undef: true}); // es5
+    .test(code, {unused: true, undef: true, elision: true}); // es5
 
   test.done();
 };
 
-exports["test: destructuring assign of empty values as JS legacy"] = function (test) {
+exports["destructuring assign of empty values as JS legacy"] = function (test) {
   var code = [
     "var [ a ] = [ 1, 2 ];",
     "var [ c, d ] = [ 1 ];",
@@ -1310,7 +1698,7 @@ exports["test: destructuring assign of empty values as JS legacy"] = function (t
   test.done();
 };
 
-exports["test: array element assignment inside array"] = function (test) {
+exports["array element assignment inside array"] = function (test) {
   var code = [
     "var a1 = {};",
     "var a2 = [function f() {a1[0] = 1;}];",
@@ -1322,7 +1710,7 @@ exports["test: array element assignment inside array"] = function (test) {
   test.done();
 };
 
-exports["test: let statement as moz"] = function (test) {
+exports["let statement as moz"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1342,7 +1730,7 @@ exports["test: let statement as moz"] = function (test) {
   test.done();
 };
 
-exports["test: let statement as esnext"] = function (test) {
+exports["let statement as esnext"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1362,7 +1750,7 @@ exports["test: let statement as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let statement as es5"] = function (test) {
+exports["let statement as es5"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1385,7 +1773,7 @@ exports["test: let statement as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let statement as legacy JS"] = function (test) {
+exports["let statement as legacy JS"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1408,7 +1796,7 @@ exports["test: let statement as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: let statement out of scope as moz"] = function (test) {
+exports["let statement out of scope as moz"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1432,7 +1820,7 @@ exports["test: let statement out of scope as moz"] = function (test) {
   test.done();
 };
 
-exports["test: let statement out of scope as esnext"] = function (test) {
+exports["let statement out of scope as esnext"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1456,7 +1844,7 @@ exports["test: let statement out of scope as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let statement out of scope as es5"] = function (test) {
+exports["let statement out of scope as es5"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1483,7 +1871,7 @@ exports["test: let statement out of scope as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let statement out of scope as legacy JS"] = function (test) {
+exports["let statement out of scope as legacy JS"] = function (test) {
   var code = [
     "let x = 1;",
     "{",
@@ -1510,7 +1898,7 @@ exports["test: let statement out of scope as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in functions as moz"] = function (test) {
+exports["let statement in functions as moz"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1532,7 +1920,7 @@ exports["test: let statement in functions as moz"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in functions as esnext"] = function (test) {
+exports["let statement in functions as esnext"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1554,7 +1942,7 @@ exports["test: let statement in functions as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in functions as es5"] = function (test) {
+exports["let statement in functions as es5"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1579,7 +1967,7 @@ exports["test: let statement in functions as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in functions as legacy JS"] = function (test) {
+exports["let statement in functions as legacy JS"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1604,7 +1992,7 @@ exports["test: let statement in functions as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: let statement not in scope as moz"] = function (test) {
+exports["let statement not in scope as moz"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1632,7 +2020,7 @@ exports["test: let statement not in scope as moz"] = function (test) {
   test.done();
 };
 
-exports["test: let statement not in scope as esnext"] = function (test) {
+exports["let statement not in scope as esnext"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1660,39 +2048,7 @@ exports["test: let statement not in scope as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let statement not in scope as es5"] = function (test) {
-  var code = [
-    "let x = 1;",
-    "function foo() {",
-    "  let y = 3 ;",
-    "  let bar = function () {",
-    "    print(x);",
-    "    let z = 2;",
-    "  };",
-    "  print(z);",
-    "}",
-    "print(y);",
-    "bar();",
-    "foo();",
-  ];
-
-  TestRun(test)
-    .addError(1, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(3, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(4, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(6, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(6, "'z' is defined but never used.")
-    .addError(3, "'y' is defined but never used.")
-    .addError(4, "'bar' is defined but never used.")
-    .addError(8, "'z' is not defined.")
-    .addError(10, "'y' is not defined.")
-    .addError(11, "'bar' is not defined.")
-    .test(code, {unused: true, undef: true, predef: ["print"]}); // es5
-
-  test.done();
-};
-
-exports["test: let statement not in scope as legacy JS"] = function (test) {
+exports["let statement not in scope as es5"] = function (test) {
   var code = [
     "let x = 1;",
     "function foo() {",
@@ -1719,12 +2075,44 @@ exports["test: let statement not in scope as legacy JS"] = function (test) {
     .addError(8, "'z' is not defined.")
     .addError(10, "'y' is not defined.")
     .addError(11, "'bar' is not defined.")
+    .test(code, {unused: true, undef: true, predef: ["print"]}); // es5
+
+  test.done();
+};
+
+exports["let statement not in scope as legacy JS"] = function (test) {
+  var code = [
+    "let x = 1;",
+    "function foo() {",
+    "  let y = 3 ;",
+    "  let bar = function () {",
+    "    print(x);",
+    "    let z = 2;",
+    "  };",
+    "  print(z);",
+    "}",
+    "print(y);",
+    "bar();",
+    "foo();",
+  ];
+
+  TestRun(test)
+    .addError(1, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(3, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(4, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(6, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(6, "'z' is defined but never used.")
+    .addError(3, "'y' is defined but never used.")
+    .addError(4, "'bar' is defined but never used.")
+    .addError(8, "'z' is not defined.")
+    .addError(10, "'y' is not defined.")
+    .addError(11, "'bar' is not defined.")
     .test(code, {es3: true, unused: true, undef: true, predef: ["print"]});
 
   test.done();
 };
 
-exports["test: let statement in for loop as moz"] = function (test) {
+exports["let statement in for loop as moz"] = function (test) {
   var code = [
     "var obj={foo: 'bar', bar: 'foo'};",
     "for ( let [n, v] in Iterator(obj) ) {",
@@ -1750,7 +2138,7 @@ exports["test: let statement in for loop as moz"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in for loop as esnext"] = function (test) {
+exports["let statement in for loop as esnext"] = function (test) {
   var code = [
     "var obj={foo: 'bar', bar: 'foo'};",
     "for ( let [n, v] in Iterator(obj) ) {",
@@ -1776,7 +2164,7 @@ exports["test: let statement in for loop as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in for loop as es5"] = function (test) {
+exports["let statement in for loop as es5"] = function (test) {
   var code = [
     "var obj={foo: 'bar', bar: 'foo'};",
     "for ( let [n, v] in Iterator(obj) ) {",
@@ -1808,7 +2196,7 @@ exports["test: let statement in for loop as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in for loop as legacy JS"] = function (test) {
+exports["let statement in for loop as legacy JS"] = function (test) {
   var code = [
     "var obj={foo: 'bar', bar: 'foo'};",
     "for ( let [n, v] in Iterator(obj) ) {",
@@ -1840,7 +2228,7 @@ exports["test: let statement in for loop as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: let statement in destructured for loop as moz"] = function (test) {
+exports["let statement in destructured for loop as moz"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "var people = [",
@@ -1875,7 +2263,7 @@ exports["test: let statement in destructured for loop as moz"] = function (test)
   test.done();
 };
 
-exports["test: let statement in destructured for loop as esnext"] = function (test) {
+exports["let statement in destructured for loop as esnext"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "var people = [",
@@ -1910,7 +2298,7 @@ exports["test: let statement in destructured for loop as esnext"] = function (te
   test.done();
 };
 
-exports["test: let statement in destructured for loop as es5"] = function (test) {
+exports["let statement in destructured for loop as es5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "var people = [",
@@ -1946,7 +2334,7 @@ exports["test: let statement in destructured for loop as es5"] = function (test)
   test.done();
 };
 
-exports["test: let statement in destructured for loop as legacy JS"] = function (test) {
+exports["let statement in destructured for loop as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "var people = [",
@@ -1982,7 +2370,7 @@ exports["test: let statement in destructured for loop as legacy JS"] = function 
   test.done();
 };
 
-exports["test: let statement (as seen in jetpack)"] = function (test) {
+exports["let statement (as seen in jetpack)"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "const { Cc, Ci } = require('chrome');",
@@ -2006,7 +2394,7 @@ exports["test: let statement (as seen in jetpack)"] = function (test) {
   test.done();
 };
 
-exports["test: let statement (as seen in jetpack) as esnext"] = function (test) {
+exports["let statement (as seen in jetpack) as esnext"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "const { Cc, Ci } = require('chrome');",
@@ -2031,7 +2419,7 @@ exports["test: let statement (as seen in jetpack) as esnext"] = function (test) 
   test.done();
 };
 
-exports["test: let statement (as seen in jetpack) as es5"] = function (test) {
+exports["let statement (as seen in jetpack) as es5"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "const { Cc, Ci } = require('chrome');",
@@ -2059,7 +2447,7 @@ exports["test: let statement (as seen in jetpack) as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let statement (as seen in jetpack) as legacy JS"] = function (test) {
+exports["let statement (as seen in jetpack) as legacy JS"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "const { Cc, Ci } = require('chrome');",
@@ -2087,7 +2475,7 @@ exports["test: let statement (as seen in jetpack) as legacy JS"] = function (tes
   test.done();
 };
 
-exports["test: let block and let expression"] = function (test) {
+exports["let block and let expression"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "let (x=1, y=2, z=3)",
@@ -2102,7 +2490,7 @@ exports["test: let block and let expression"] = function (test) {
   test.done();
 };
 
-exports["test: let block and let expression as esnext"] = function (test) {
+exports["let block and let expression as esnext"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "let (x=1, y=2, z=3)",
@@ -2121,7 +2509,7 @@ exports["test: let block and let expression as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: let block and let expression as es5"] = function (test) {
+exports["let block and let expression as es5"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "let (x=1, y=2, z=3)",
@@ -2143,7 +2531,7 @@ exports["test: let block and let expression as es5"] = function (test) {
   test.done();
 };
 
-exports["test: let block and let expression as legacy JS"] = function (test) {
+exports["let block and let expression as legacy JS"] = function (test) {
   // Example taken from jetpack/addons sdk library from Mozilla project
   var code = [
     "let (x=1, y=2, z=3)",
@@ -2299,7 +2687,7 @@ exports["test destructuring function as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: invalid for each"] = function (test) {
+exports["invalid for each"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "for each (let i = 0; i<15; ++i) {",
@@ -2314,7 +2702,7 @@ exports["test: invalid for each"] = function (test) {
   test.done();
 };
 
-exports["test: invalid for each as esnext"] = function (test) {
+exports["invalid for each as esnext"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "for each (let i = 0; i<15; ++i) {",
@@ -2330,7 +2718,7 @@ exports["test: invalid for each as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: invalid for each as ES5"] = function (test) {
+exports["invalid for each as ES5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "for each (let i = 0; i<15; ++i) {",
@@ -2347,7 +2735,7 @@ exports["test: invalid for each as ES5"] = function (test) {
   test.done();
 };
 
-exports["test: invalid for each as legacy JS"] = function (test) {
+exports["invalid for each as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "for each (let i = 0; i<15; ++i) {",
@@ -2363,7 +2751,7 @@ exports["test: invalid for each as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator"] = function (test) {
+exports["esnext generator"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function* fib() {",
@@ -2384,7 +2772,7 @@ exports["test: esnext generator"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator as moz extension"] = function (test) {
+exports["esnext generator as moz extension"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function* fib() {",
@@ -2406,7 +2794,7 @@ exports["test: esnext generator as moz extension"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator as es5"] = function (test) {
+exports["esnext generator as es5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function* fib() {",
@@ -2430,7 +2818,7 @@ exports["test: esnext generator as es5"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator as legacy JS"] = function (test) {
+exports["esnext generator as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function* fib() {",
@@ -2454,7 +2842,7 @@ exports["test: esnext generator as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator without yield"] = function (test) {
+exports["esnext generator without yield"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function* fib() {",
@@ -2476,7 +2864,7 @@ exports["test: esnext generator without yield"] = function (test) {
   test.done();
 };
 
-exports["test: esnext generator without yield and check turned off"] = function (test) {
+exports["esnext generator without yield and check turned off"] = function (test) {
   var code = [
     "function* emptyGenerator() {}",
 
@@ -2488,7 +2876,27 @@ exports["test: esnext generator without yield and check turned off"] = function 
   test.done();
 };
 
-exports["test: mozilla generator"] = function (test) {
+exports["esnext generator with yield delegation, gh-1544"] = function(test) {
+  var code = [
+    "function* G() {",
+    "  yield* (function*(){})();",
+    "}"
+  ];
+
+  TestRun(test)
+    .addError(1, "'function*' is only available in ES6 (use esnext option).")
+    .addError(2, "'yield' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(2, "'function*' is only available in ES6 (use esnext option).")
+    .addError(2, "A generator function shall contain a yield statement.")
+    .test(code);
+
+
+  TestRun(test).test(code, {esnext: true, noyield: true});
+
+  test.done();
+};
+
+exports["mozilla generator"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function fib() {",
@@ -2508,7 +2916,7 @@ exports["test: mozilla generator"] = function (test) {
   test.done();
 };
 
-exports["test: mozilla generator as esnext"] = function (test) {
+exports["mozilla generator as esnext"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function fib() {",
@@ -2530,7 +2938,7 @@ exports["test: mozilla generator as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: yield statement within try-catch"] = function (test) {
+exports["yield statement within try-catch"] = function (test) {
   // see issue: https://github.com/jshint/jshint/issues/1505
   var code = [
     "function* fib() {",
@@ -2550,7 +2958,7 @@ exports["test: yield statement within try-catch"] = function (test) {
   test.done();
 };
 
-exports["test: mozilla generator as es5"] = function (test) {
+exports["mozilla generator as es5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function fib() {",
@@ -2573,7 +2981,7 @@ exports["test: mozilla generator as es5"] = function (test) {
   test.done();
 };
 
-exports["test: mozilla generator as legacy JS"] = function (test) {
+exports["mozilla generator as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function fib() {",
@@ -2596,7 +3004,7 @@ exports["test: mozilla generator as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: array comprehension"] = function (test) {
+exports["array comprehension"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function *range(begin, end) {",
@@ -2607,7 +3015,11 @@ exports["test: array comprehension"] = function (test) {
     "var ten_squares = [for (i of range(0, 10)) i * i];",
     "var evens = [for (i of range(0, 21)) if (i % 2 === 0) i];",
     "print('squares:', ten_squares);",
-    "print('evens:', evens);"
+    "print('evens:', evens);",
+    "(function() {",
+    "  var ten_squares = [for (i of range(0, 10)) i * i];",
+    "  print('squares:', ten_squares);",
+    "}());"
   ];
   TestRun(test)
     .test(code, {esnext: true, unused: true, undef: true, predef: ["print"]});
@@ -2615,7 +3027,26 @@ exports["test: array comprehension"] = function (test) {
   test.done();
 };
 
-exports["test: moz-style array comprehension"] = function (test) {
+exports["gh-1856 mistakenly identified as array comprehension"] = function (test) {
+  var code = [
+    "function main(value) {",
+    "  var result = ['{'],",
+    "      key;",
+    "  for (key in value) {",
+    "    result.push(key);",
+    "  }",
+    "  return result;",
+    "}",
+    "main({abc:true});"
+  ];
+
+  TestRun(test)
+    .test(code);
+
+  test.done();
+};
+
+exports["moz-style array comprehension"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2634,7 +3065,7 @@ exports["test: moz-style array comprehension"] = function (test) {
   test.done();
 };
 
-exports["test: array comprehension with for..of"] = function (test) {
+exports["array comprehension with for..of"] = function (test) {
   // example adapted from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function *range(begin, end) {",
@@ -2653,7 +3084,7 @@ exports["test: array comprehension with for..of"] = function (test) {
   test.done();
 };
 
-exports["test: moz-style array comprehension with for..of"] = function (test) {
+exports["moz-style array comprehension with for..of"] = function (test) {
   // example adapted from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2672,7 +3103,7 @@ exports["test: moz-style array comprehension with for..of"] = function (test) {
   test.done();
 };
 
-exports["test: array comprehension with unused variables"] = function (test) {
+exports["array comprehension with unused variables"] = function (test) {
   var code = [
     "var ret = [for (i of unknown) i];",
     "print('ret:', ret);",
@@ -2684,7 +3115,7 @@ exports["test: array comprehension with unused variables"] = function (test) {
   test.done();
 };
 
-exports["test: moz-style array comprehension with unused variables"] = function (test) {
+exports["moz-style array comprehension with unused variables"] = function (test) {
   var code = [
     "var ret = [i for (i of unknown)];",
     "print('ret:', ret);",
@@ -2696,7 +3127,7 @@ exports["test: moz-style array comprehension with unused variables"] = function 
   test.done();
 };
 
-exports["test: moz-style array comprehension as esnext"] = function (test) {
+exports["moz-style array comprehension as esnext"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2721,7 +3152,7 @@ exports["test: moz-style array comprehension as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: array comprehension as es5"] = function (test) {
+exports["array comprehension as es5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function *range(begin, end) {",
@@ -2747,7 +3178,7 @@ exports["test: array comprehension as es5"] = function (test) {
   test.done();
 };
 
-exports["test: moz-style array comprehension as es5"] = function (test) {
+exports["moz-style array comprehension as es5"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2776,7 +3207,7 @@ exports["test: moz-style array comprehension as es5"] = function (test) {
   test.done();
 };
 
-exports["test: array comprehension as legacy JS"] = function (test) {
+exports["array comprehension as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2801,7 +3232,7 @@ exports["test: array comprehension as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: moz-style array comprehension as legacy JS"] = function (test) {
+exports["moz-style array comprehension as legacy JS"] = function (test) {
   // example taken from https://developer.mozilla.org/en-US/docs/JavaScript/New_in_JavaScript/1.7
   var code = [
     "function range(begin, end) {",
@@ -2830,7 +3261,7 @@ exports["test: moz-style array comprehension as legacy JS"] = function (test) {
   test.done();
 };
 
-exports['test: array comprehension with dest array at global scope'] = function (test) {
+exports['array comprehension with dest array at global scope'] = function (test) {
   var code = [
     "[for ([i, j] of [[0,0], [1,1], [2,2]]) [i, j] ];",
     "var destarray_comparray_1 = [for ([i, j] of [[0,0], [1,1], [2,2]]) [i, [j, j] ]];",
@@ -2842,7 +3273,7 @@ exports['test: array comprehension with dest array at global scope'] = function 
   test.done();
 };
 
-exports['test: moz-style array comprehension with dest array at global scope'] = function (test) {
+exports['moz-style array comprehension with dest array at global scope'] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
     "var destarray_comparray_1 = [ [i, [j, j] ] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
@@ -2854,7 +3285,7 @@ exports['test: moz-style array comprehension with dest array at global scope'] =
   test.done();
 };
 
-exports['test: moz-style array comprehension with dest array at global scope as esnext'] = function (test) {
+exports['moz-style array comprehension with dest array at global scope as esnext'] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
     "var destarray_comparray_1 = [ [i, [j, j] ] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
@@ -2872,7 +3303,7 @@ exports['test: moz-style array comprehension with dest array at global scope as 
   test.done();
 };
 
-exports['test: array comprehension with dest array at global scope as es5'] = function (test) {
+exports['array comprehension with dest array at global scope as es5'] = function (test) {
   var code = [
     "[for ([i, j] of [[0,0], [1,1], [2,2]]) [i, j] ];",
     "var destarray_comparray_1 = [for ([i, j] of [[0,0], [1,1], [2,2]]) [i, [j, j] ] ];",
@@ -2890,7 +3321,7 @@ exports['test: array comprehension with dest array at global scope as es5'] = fu
   test.done();
 };
 
-exports['test: moz-style array comprehension with dest array at global scope as es5'] = function (test) {
+exports['moz-style array comprehension with dest array at global scope as es5'] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
     "var destarray_comparray_1 = [ [i, [j, j] ] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
@@ -2914,7 +3345,7 @@ exports['test: moz-style array comprehension with dest array at global scope as 
   test.done();
 };
 
-exports['test: array comprehension with dest array at global scope as JS legacy'] = function (test) {
+exports['array comprehension with dest array at global scope as JS legacy'] = function (test) {
   var code = [
     "[for ([i, j] of [[0,0], [1,1], [2,2]]) [i, j] ];",
     "var destarray_comparray_1 = [for ([i, j] of [[0,0], [1,1], [2,2]]) [i, [j, j] ] ];",
@@ -2932,7 +3363,7 @@ exports['test: array comprehension with dest array at global scope as JS legacy'
   test.done();
 };
 
-exports['test: moz-style array comprehension with dest array at global scope as JS legacy'] = function (test) {
+exports['moz-style array comprehension with dest array at global scope as JS legacy'] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
     "var destarray_comparray_1 = [ [i, [j, j] ] for each ([i, j] in [[0,0], [1,1], [2,2]])];",
@@ -2956,7 +3387,7 @@ exports['test: moz-style array comprehension with dest array at global scope as 
   test.done();
 };
 
-exports["test: array comprehension imbrication with dest array"] = function (test) {
+exports["array comprehension imbrication with dest array"] = function (test) {
   var code = [
     "[for ([i, j] of [for ([a, b] of [[2,2], [3,4]]) [a, b] ]) [i, j] ];"
   ];
@@ -2967,7 +3398,7 @@ exports["test: array comprehension imbrication with dest array"] = function (tes
   test.done();
 };
 
-exports["test: moz-style array comprehension imbrication with dest array"] = function (test) {
+exports["moz-style array comprehension imbrication with dest array"] = function (test) {
   var code = [
     "[ [i, j] for ([i, j] in [[a, b] for each ([a, b] in [[2,2], [3,4]])]) ];"
   ];
@@ -2978,7 +3409,7 @@ exports["test: moz-style array comprehension imbrication with dest array"] = fun
   test.done();
 };
 
-exports["test: moz-style array comprehension imbrication with dest array using for..of"] = function (test) {
+exports["moz-style array comprehension imbrication with dest array using for..of"] = function (test) {
   var code = [
     "[ [i, j] for ([i, j] of [[a, b] for ([a, b] of [[2,2], [3,4]])]) ];"
   ];
@@ -2989,7 +3420,7 @@ exports["test: moz-style array comprehension imbrication with dest array using f
   test.done();
 };
 
-exports["test: moz-style array comprehension imbrication with dest array as esnext"] = function (test) {
+exports["moz-style array comprehension imbrication with dest array as esnext"] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[a, b] for each ([a, b] in [[2,2], [3,4]])]) ];"
   ];
@@ -3001,7 +3432,7 @@ exports["test: moz-style array comprehension imbrication with dest array as esne
   test.done();
 };
 
-exports["test: array comprehension imbrication with dest array as es5"] = function (test) {
+exports["array comprehension imbrication with dest array as es5"] = function (test) {
   var code = [
     "[for ([i, j] of [for ([a, b] of [[2,2], [3,4]]) [a, b] ]) [i, j] ];"
   ];
@@ -3015,7 +3446,7 @@ exports["test: array comprehension imbrication with dest array as es5"] = functi
   test.done();
 };
 
-exports["test: moz-style array comprehension imbrication with dest array as es5"] = function (test) {
+exports["moz-style array comprehension imbrication with dest array as es5"] = function (test) {
   var code = [
     "[for ([i, j] of [for ([a, b] of [[2,2], [3,4]]) [a, b] ]) [i, j] ];"
   ];
@@ -3029,7 +3460,7 @@ exports["test: moz-style array comprehension imbrication with dest array as es5"
   test.done();
 };
 
-exports["test: array comprehension imbrication with dest array as legacy JS"] = function (test) {
+exports["array comprehension imbrication with dest array as legacy JS"] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[a, b] for each ([a, b] in [[2,2], [3,4]])]) ];"
 
@@ -3047,7 +3478,7 @@ exports["test: array comprehension imbrication with dest array as legacy JS"] = 
   test.done();
 };
 
-exports["test: moz-style array comprehension imbrication with dest array as legacy JS"] = function (test) {
+exports["moz-style array comprehension imbrication with dest array as legacy JS"] = function (test) {
   var code = [
     "[ [i, j] for each ([i, j] in [[a, b] for each ([a, b] in [[2,2], [3,4]])]) ];"
 
@@ -3065,7 +3496,7 @@ exports["test: moz-style array comprehension imbrication with dest array as lega
   test.done();
 };
 
-exports["test: no false positive array comprehension"] = function (test) {
+exports["no false positive array comprehension"] = function (test) {
   var code = [
     "var foo = []; for (let i in [1,2,3]) { print(i); }"
   ];
@@ -3141,7 +3572,7 @@ exports["try catch filters as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: function closure expression"] = function (test) {
+exports["function closure expression"] = function (test) {
   var code = [
     "let (arr = [1,2,3]) {",
     "  arr.every(function (o) o instanceof Object);",
@@ -3153,7 +3584,7 @@ exports["test: function closure expression"] = function (test) {
   test.done();
 };
 
-exports["test: function closure expression as esnext"] = function (test) {
+exports["function closure expression as esnext"] = function (test) {
   var code = [
     "var arr = [1,2,3];",
     "arr.every(function (o) o instanceof Object);",
@@ -3166,7 +3597,7 @@ exports["test: function closure expression as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: function closure expression as es5"] = function (test) {
+exports["function closure expression as es5"] = function (test) {
   var code = [
     "var arr = [1,2,3];",
     "arr.every(function (o) o instanceof Object);",
@@ -3179,7 +3610,7 @@ exports["test: function closure expression as es5"] = function (test) {
   test.done();
 };
 
-exports["test: function closure expression as legacy JS"] = function (test) {
+exports["function closure expression as legacy JS"] = function (test) {
   var code = [
     "var arr = [1,2,3];",
     "arr.every(function (o) o instanceof Object);",
@@ -3192,7 +3623,7 @@ exports["test: function closure expression as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: for of as esnext"] = function (test) {
+exports["for of as esnext"] = function (test) {
   var code = [
     "for (let x of [1,2,3,4]) {",
     "    print(x);",
@@ -3205,7 +3636,7 @@ exports["test: for of as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: for of as es5"] = function (test) {
+exports["for of as es5"] = function (test) {
   var code = [
     "for (let x of [1,2,3,4]) {",
     "    print(x);",
@@ -3222,7 +3653,7 @@ exports["test: for of as es5"] = function (test) {
   test.done();
 };
 
-exports["test: for of as legacy JS"] = function (test) {
+exports["for of as legacy JS"] = function (test) {
   var code = [
     "for (let x of [1,2,3,4]) {",
     "    print(x);",
@@ -3239,7 +3670,7 @@ exports["test: for of as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: try multi-catch for moz extensions"] = function (test) {
+exports["try multi-catch for moz extensions"] = function (test) {
   var code = [
     "try {",
     "    print('X');",
@@ -3257,7 +3688,7 @@ exports["test: try multi-catch for moz extensions"] = function (test) {
   test.done();
 };
 
-exports["test: try multi-catch as esnext"] = function (test) {
+exports["try multi-catch as esnext"] = function (test) {
   var code = [
     "try {",
     "    print('X');",
@@ -3277,7 +3708,7 @@ exports["test: try multi-catch as esnext"] = function (test) {
   test.done();
 };
 
-exports["test: try multi-catch as es5"] = function (test) {
+exports["try multi-catch as es5"] = function (test) {
   var code = [
     "try {",
     "    print('X');",
@@ -3297,7 +3728,7 @@ exports["test: try multi-catch as es5"] = function (test) {
   test.done();
 };
 
-exports["test: try multi-catch as legacy JS"] = function (test) {
+exports["try multi-catch as legacy JS"] = function (test) {
   var code = [
     "try {",
     "    print('X');",
@@ -3318,7 +3749,7 @@ exports["test: try multi-catch as legacy JS"] = function (test) {
   test.done();
 };
 
-exports["test: no let not directly within a block"] = function (test) {
+exports["no let not directly within a block"] = function (test) {
   var code = [
     "if (true) let x = 1;",
     "function foo() {",
@@ -3528,7 +3959,56 @@ exports["fat arrows support"] = function (test) {
   test.done();
 };
 
-exports["concise methods support"] = function (test) {
+exports["fat arrow nested function scoping"] = function (test) {
+  var code = [
+    "(() => {",
+    "  for (var i = 0; i < 10; i++) {",
+    "    var x;",
+    "  }",
+    "  var arrow = (x) => {",
+    "    return x;",
+    "  };",
+    "  var arrow2 = (x) => x;",
+    "  arrow();",
+    "  arrow2();",
+    "})();",
+    "(function() {",
+    "  for (var i = 0; i < 10; i++) {",
+    "    var x;",
+    "  }",
+    "  var arrow = (x) => {",
+    "    return x;",
+    "  };",
+    "  var arrow2 = (x) => x;",
+    "  arrow();",
+    "  arrow2();",
+    "})();"
+  ];
+
+  TestRun(test)
+    .test(code, {esnext: true});
+
+  test.done();
+};
+
+exports["default arguments in fat arrow functions"] = function (test) {
+  TestRun(test)
+    .test("(x = 0) => { return x; };", { expr: true, unused: true, esnext: true });
+
+  test.done();
+};
+
+exports["expressions in place of arrow function parameters"] = function (test) {
+  TestRun(test)
+    .addError(1, "Expected an identifier and instead saw '1'.")
+    .test("(1) => {};", { expr: true, esnext: true });
+
+  test.done();
+};
+
+var conciseMethods = exports.conciseMethods = {};
+
+conciseMethods.basicSupport = function (test) {
   var code = [
     "var foobar = {",
     "  foo () {",
@@ -3556,7 +4036,7 @@ exports["concise methods support"] = function (test) {
   test.done();
 };
 
-exports["concise methods support for 'get' and 'set' function names"] = function (test) {
+conciseMethods.getAndSet = function (test) {
   var code = [
     "var a = [1, 2, 3, 4, 5];",
     "var strange = {",
@@ -3574,7 +4054,7 @@ exports["concise methods support for 'get' and 'set' function names"] = function
   test.done();
 };
 
-exports["concise methods support for 'get' without 'set'"] = function (test) {
+conciseMethods.getWithoutSet = function (test) {
   var code = [
     "var a = [1, 2, 3, 4, 5];",
     "var strange = {",
@@ -3589,7 +4069,7 @@ exports["concise methods support for 'get' without 'set'"] = function (test) {
   test.done();
 };
 
-exports["concise methods support for 'set' without 'get'"] = function (test) {
+conciseMethods.getWithoutSet = function (test) {
   var code = [
     "var a = [1, 2, 3, 4, 5];",
     "var strange = {",
@@ -3604,46 +4084,283 @@ exports["concise methods support for 'set' without 'get'"] = function (test) {
   test.done();
 };
 
-exports["spread rest operator support"] = function (test) {
+// GH-2022: "Concise method names are colliding with params/variables"
+conciseMethods.nameIsNotLocalVar = function (test) {
   var code = [
-    // spread operator
-    "function foo(a, b, c) {",
-    "    console.log(a, b, c); ",
-    "}",
-    "var args = [ 0, 1, 2 ];",
+    "var obj = {",
+    "  foo(foo) {},",
+    "  bar() { var bar; }",
+    "};"
+  ];
+
+  TestRun(test).test(code, {esnext: true});
+
+  test.done();
+};
+
+exports["object short notation: basic"] = function (test) {
+  var code = [
+    "var foo = 42;",
+    "var bar = {foo};",
+    "var baz = {foo, bar};",
+    "var biz = {",
+    "  foo,",
+    "  bar",
+    "};"
+  ];
+
+  TestRun(test, 1).test(code, {esnext: true});
+
+  TestRun(test, 2)
+    .addError(2, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(3, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(5, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(6, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .test(code);
+
+  test.done();
+};
+
+exports["object short notation: mixed"] = function (test) {
+  var code = [
+    "var b = 1, c = 2;",
+    "var o1 = {a: 1, b, c};",
+    "var o2 = {b, a: 1, c};"
+  ].join("\n");
+
+  TestRun(test).test(code, { esnext: true });
+
+  TestRun(test)
+    .addError(2, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(2, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(3, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(3, "'object short notation' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+  .test(code);
+
+  test.done();
+};
+
+exports["object ComputedPropertyName"] = function (test) {
+  var code = [
+    "function fn(obj) {}",
+    "function p() { return 'key'; }",
+    "var vals = [1];",
+    "var a = 7;",
+    "var o1 = {",
+      "[a++]: true,",
+      "obj: { [a++ + 1]: true },",
+      "[a + 3]() {},",
+      "[p()]: true,",
+      "[vals[0]]: true,",
+      "[(1)]: true,",
+    "};",
+    "fn({ [a / 7]: true });",
+    "var b = { '[': 1 };",
+    "var c = { [b]: 1 };",
+    "var d = { 0: 1 };",
+    "var e = { ['s']: 1 };",
+  ];
+
+  TestRun(test).test(code, { esnext: true });
+
+  TestRun(test)
+    .addError(6, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(7, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(8, "'concise methods' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(8, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(9, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(10, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(11, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(13, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(15, "'computed property names' is only available in ES6 (use esnext option).")
+    .addError(17, "'computed property names' is only available in ES6 (use esnext option).")
+  .test(code);
+
+  test.done();
+};
+
+exports["spread & rest operator support"] = function (test) {
+  var code = [
+    // 1
+    // Spread Identifier
     "foo(...args);",
 
-    // spread operator
+    // 2
+    // Spread Array Literal
+    "foo(...[]);",
+
+    // 3, 4
+    // Spread String Literal
+    "foo(...'');",
+    'foo(..."");',
+
+    // 5
+    // Spread Group
+    "foo(...([]));",
+
+    // 6, 7, 8
+    // Spread Operator
     "let initial = [ 1, 2, 3, 4, 5 ];",
     "let extended = [ ...initial, 6, 7, 8, 9 ];",
+    "let nest = [ ...[], 6, 7, 8, 9 ];",
 
-    // rest operator
-    "(function foo(i, j, ...args) {",
-    "    return args;",
-    "}());",
+    // 9
+    // Rest Operator
+    "function foo(...args) {}",
 
-    // rest operator on a fat arrow function
-    "let bar = (...args) => args;"
+    // 10
+    // Rest Operator (Fat Arrow Params)
+    "let bar = (...args) => args;",
+
+    // 11
+    "foo(...[].entries());",
+
+    // 12
+    "foo(...(new Map()).set('a', 1).values());"
+  ];
+
+  TestRun(test)
+    .test(code, {esnext: true});
+
+  TestRun(test)
+    .addError(1, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(2, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(3, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(4, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(5, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(7, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(8, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(9, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(10, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(10, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(11, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(12, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .test(code, {moz: true});
+
+  TestRun(test)
+    .addError(1, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(2, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(3, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(4, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(5, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(6, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(7, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+
+    .addError(7, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(8, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(8, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(9, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(10, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(10, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(10, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(11, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(12, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .test(code);
+
+  test.done();
+};
+
+exports["parameter destructuring with rest"] = function (test) {
+  var code = [
+    // 1
+    // parameter destructuring with rest operator, solo
+    "let b = ([...args]) => args;",
+
+    // 2
+    // ...in function expression
+    "let c = function([...args]) { return args; };",
+
+    // 3
+    // ...in function declaration
+    "function d([...args]) { return args; }",
+
+    // 4
+    // default destructuring with rest operator, with leading param
+    "let e = ([first, ...args]) => args;",
+
+    // 5
+    // ...in function expression
+    "let f = function([first, ...args]) { return args; };",
+
+    // 6
+    // ...in function declaration
+    "function g([first, ...args]) { return args; }",
+
+    // 7
+    // Just rest
+    "let h = (...args) => args;",
+
+    // 8
+    // ...in function expression
+    "let i = function(...args) { return args; };",
+
+    // 9
+    // ...in function declaration
+    "function j(...args) { return args; }"
   ];
 
   var run = TestRun(test);
   run.test(code, {esnext: true});
 
   run = TestRun(test)
-    .addError(11, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).");
+    .addError(1, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(1, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(4, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(7, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(7, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(1, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(1, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(2, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(2, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(3, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(3, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(4, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(4, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(5, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(5, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(6, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(6, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(8, "'spread/rest operator' is only available in ES6 (use esnext option).")
+    .addError(9, "'spread/rest operator' is only available in ES6 (use esnext option).");
 
   run.test(code, {moz: true});
 
   run = TestRun(test)
-    .addError(5, "'spread/rest operator' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(6, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(1, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(1, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(1, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(1, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(2, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(2, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(2, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(3, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(3, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(4, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
+    .addError(4, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(4, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(4, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(5, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(5, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(5, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(6, "'destructuring expression' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(6, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(7, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
     .addError(7, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(7, "'spread/rest operator' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-    .addError(8, "'spread/rest operator' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-     .addError(11, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-     .addError(11, "'spread/rest operator' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
-     .addError(11, "'arrow function syntax (=>)' is only available in ES6 (use esnext option).")
-     .addError(11, "'spread/rest operator' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).");
+    .addError(7, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(8, "'let' is available in ES6 (use esnext option) or Mozilla JS extensions (use moz).")
+    .addError(8, "'spread/rest operator' is only available in ES6 (use esnext option).")
+
+    .addError(9, "'spread/rest operator' is only available in ES6 (use esnext option).");
+
+
+  run.test(code);
 
   test.done();
 };
@@ -3796,6 +4513,40 @@ exports["class and method naming"] = function (test) {
     "  get constructor() {}",
     "  set constructor(x) {}",
     "  prototype() {}",
+    "  an extra identifier 'in' methodName() {}",
+    "  get foo extraIdent1() {}",
+    "  set foo extraIdent2() {}",
+    "  static some extraIdent3() {}",
+    "  static get an extraIdent4() {}",
+    "  static set an extraIdent5() {}",
+    "  get dupgetter() {}",
+    "  get dupgetter() {}",
+    "  set dupsetter() {}",
+    "  set dupsetter() {}",
+    "  static get dupgetter() {}",
+    "  static get dupgetter() {}",
+    "  static set dupsetter() {}",
+    "  static set dupsetter() {}",
+    "  dupmethod() {}",
+    "  dupmethod() {}",
+    "  static dupmethod() {}",
+    "  static dupmethod() {}",
+    "  ['computed method']() {}",
+    "  static ['computed static']() {}",
+    "  get ['computed getter']() {}",
+    "  set ['computed setter']() {}",
+    "  (typo() {}",
+    "  set lonely() {}",
+    "  set lonel2",
+    "            () {}",
+    "  *validGenerator() { yield; }",
+    "  static *validStaticGenerator() { yield; }",
+    "  *[1]() { yield; }",
+    "  static *[1]() { yield; }",
+    "  * ['*']() { yield; }",
+    "  static *['*']() { yield; }",
+    "  * [('*')]() { yield; }",
+    "  static *[('*')]() { yield; }",
     "}"
   ];
   var run = TestRun(test)
@@ -3803,9 +4554,88 @@ exports["class and method naming"] = function (test) {
     .addError(2, "Expected an identifier and instead saw 'arguments' (a reserved word).")
     .addError(4, "A class getter method cannot be named 'constructor'.")
     .addError(5, "A class setter method cannot be named 'constructor'.")
-    .addError(7, "A class method cannot be named 'prototype'.");
+    .addError(6, "A class method cannot be named 'prototype'.")
+    .addError(7, "Class properties must be methods. Expected '(' but instead saw 'extra'.")
+    .addError(8, "Class properties must be methods. Expected '(' but instead saw 'extraIdent1'.")
+    .addError(9, "Class properties must be methods. Expected '(' but instead saw 'extraIdent2'.")
+    .addError(10, "Class properties must be methods. Expected '(' but instead saw 'extraIdent3'.")
+    .addError(11, "Class properties must be methods. Expected '(' but instead saw 'extraIdent4'.")
+    .addError(12, "Class properties must be methods. Expected '(' but instead saw 'extraIdent5'.")
+    .addError(14, "Duplicate getter method 'dupgetter'.")
+    .addError(16, "Duplicate setter method 'dupsetter'.")
+    .addError(16, "Setter is defined without getter.")
+    .addError(18, "Duplicate static getter method 'dupgetter'.")
+    .addError(20, "Duplicate static setter method 'dupsetter'.")
+    .addError(22, "Duplicate class method 'dupmethod'.")
+    .addError(24, "Duplicate static class method 'dupmethod'.")
+    .addError(29, "Unexpected '('.")
+    .addError(30, "Setter is defined without getter.")
+    .addError(31, "Setter is defined without getter.");
 
   run.test(code, {esnext: true});
+
+  test.done();
+};
+
+exports["class method this"] = function (test) {
+  var code = [
+  "class C {",
+  "  constructor(x) {",
+  "    this._x = x;",
+  "  }",
+  "  x() { return this._x; }",
+  "  static makeC(x) { return new this(x); }",
+  "  0() { return this._x + 0; }",
+  "  ['foo']() { return this._x + 6; }",
+  "  'test'() { return this._x + 'test'; }",
+  "  bar() { function notCtor() { return this; } notCtor(); }",
+  "}"
+  ];
+
+  TestRun(test)
+    .addError(10, "Possible strict violation.")
+    .test(code, {esnext: true});
+
+  test.done();
+};
+
+exports.classExpression = function (test) {
+  var code = [
+    "void class MyClass {",
+    "  constructor() { MyClass = null; }",
+    "  method() { MyClass = null; }",
+    "  static method() { MyClass = null; }",
+    "  get accessor() { MyClass = null; }",
+    "  set accessor() { MyClass = null; }",
+    "};",
+    "void MyClass;"
+  ];
+
+  TestRun(test)
+    .addError(2, "'MyClass' is a function.")
+    .addError(3, "'MyClass' is a function.")
+    .addError(4, "'MyClass' is a function.")
+    .addError(5, "'MyClass' is a function.")
+    .addError(6, "'MyClass' is a function.")
+    .addError(8, "'MyClass' is not defined.")
+    .test(code, { esnext: true, undef: true });
+
+  test.done();
+};
+
+exports.classExpressionThis = function (test) {
+  var code = [
+    "void class MyClass {",
+    "  constructor() { return this; }",
+    "  method() { return this; }",
+    "  static method() { return this; }",
+    "  get accessor() { return this; }",
+    "  set accessor() { return this; }",
+    "};"
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true });
 
   test.done();
 };
@@ -4076,14 +4906,107 @@ exports["test for line breaks with 'yield'"] = function (test) {
   test.done();
 };
 
-exports["regression for GH-1227"] = function (test) {
-  var src = fs.readFileSync(__dirname + "/fixtures/gh1227.js", "utf8");
+exports.unreachable = {
+  "regression for GH-1227": function (test) {
+    var src = fs.readFileSync(__dirname + "/fixtures/gh1227.js", "utf8");
 
-  TestRun(test)
-    .addError(14, "Unreachable 'return' after 'return'.")
-    .test(src);
+    TestRun(test)
+      .addError(14, "Unreachable 'return' after 'return'.")
+      .test(src);
 
-  test.done();
+    test.done();
+  },
+  break: function (test) {
+    var src = [
+      "var i = 0;",
+      "foo: while (i) {",
+      "  break foo;",
+      "  i--;",
+      "}"
+    ];
+
+    TestRun(test)
+      .addError(4, "Unreachable 'i' after 'break'.")
+      .test(src);
+
+    test.done();
+  },
+  continue: function (test) {
+    var src = [
+      "var i = 0;",
+      "while (i) {",
+      "  continue;",
+      "  i--;",
+      "}"
+    ];
+
+    TestRun(test)
+      .addError(4, "Unreachable 'i' after 'continue'.")
+      .test(src);
+
+    test.done();
+  },
+  return: function (test) {
+    var src = [
+      "(function() {",
+      "  var x = 0;",
+      "  return;",
+      "  x++;",
+      "}());"
+    ];
+
+    TestRun(test)
+      .addError(4, "Unreachable 'x' after 'return'.")
+      .test(src);
+
+    test.done();
+  },
+  throw: function (test) {
+    var src = [
+      "throw new Error();",
+      "var x;"
+    ];
+
+    TestRun(test)
+      .addError(2, "Unreachable 'var' after 'throw'.")
+      .test(src);
+
+    test.done();
+  },
+  braceless: function (test) {
+    var src = [
+      "(function() {",
+      "  var x;",
+      "  if (x)",
+      "    return;",
+      "  return;",
+      "}());"
+    ];
+
+    TestRun(test)
+      .test(src);
+
+    test.done();
+  },
+  // Regression test for GH-1387 "false positive: Unreachable 'x' after 'return'"
+  nestedBraceless: function (test) {
+    var src = [
+      "(function() {",
+      "  var x;",
+      "  if (!x)",
+      "    return function() {",
+      "      if (!x) x = 0;",
+      "      return;",
+      "    };",
+      "  return;",
+      "}());"
+    ];
+
+    TestRun(test)
+      .test(src);
+
+    test.done();
+  }
 };
 
 exports["test for 'break' in switch case + curly braces"] = function (test) {
@@ -4165,8 +5088,54 @@ exports["/*jshint ignore */ should allow the linter to skip blocked-out lines to
   var code = fs.readFileSync(__dirname + "/fixtures/gh826.js", "utf8");
 
   TestRun(test)
-    .addError(33, "Use '===' to compare with '0'.")
+    .addError(34, "Use '===' to compare with '0'.")
     .test(code);
+
+  test.done();
+};
+
+exports["/*jshint ignore */ should ignore lines that appear to end with multiline comment endings (GH-1691)"] = function(test) {
+  var code = [
+    "/*jshint ignore: start*/",
+    "var a = {",
+    // The following line ends in a sequence of characters that, if parsed
+    // naively, could be interpreted as an "end multiline comment" token.
+    "  a: /\s*/",
+    "};",
+    "/*jshint ignore: end*/"
+  ];
+
+  TestRun(test)
+    .test(code);
+
+  test.done();
+};
+
+exports["/*jshint ignore */ should ignore lines that end with a multi-line comment (GH-1396)"] = function(test) {
+  var code = [
+    "/*jshint ignore:start */",
+    "var a; /* following comment */",
+    "/*jshint ignore:end */"
+  ];
+
+  TestRun(test)
+    .test(code, { unused: true });
+
+  test.done();
+};
+
+exports["/*jshint ignore */ should ignore multi-line comments"] = function(test) {
+  var code = [
+    "/*jshint ignore:start */",
+    "/*",
+    "following comment",
+    "*/",
+    "var a;",
+    "/*jshint ignore:end */"
+  ];
+
+  TestRun(test)
+    .test(code, { unused: true });
 
   test.done();
 };
@@ -4372,5 +5341,358 @@ exports["regression crash from GH-1573"] = function (test) {
 
 exports["make sure we don't throw errors on removed options"] = function (test) {
   TestRun(test).test("a();", { nomen: true, onevar: true, passfail: true, white: true });
+  test.done();
+};
+
+exports["'for of' shouldn't be subject to 'for in' rules"] = function (test) {
+  TestRun(test)
+    .test("for (let x of [1, 2, 3]) { console.log(x); }", { forin: true, esnext: true });
+  test.done();
+};
+
+exports["Ignore strings containing braces within array literal declarations"] = function (test) {
+  TestRun(test).test("var a = [ '[' ];");
+  test.done();
+};
+
+exports["gh-1016: don't issue W088 if identifier is outside of blockscope"] = function (test) {
+  var code = [
+    "var globalKey;",
+    "function x() {",
+    "  var key;",
+    "  var foo = function () {",
+    "      alert(key);",
+    "  };",
+    "  for (key in {}) {",
+    "      foo();",
+    "  }",
+    "  function y() {",
+    "    for (key in {}) {",
+    "      foo();",
+    "    }",
+    "    for (globalKey in {}) {",
+    "      foo();",
+    "    }",
+    "    for (nonKey in {}) {",
+    "      foo();",
+    "    }",
+    "  }",
+    "}"
+  ];
+
+  TestRun(test)
+    .addError(17, "Creating global 'for' variable. Should be 'for (var nonKey ...'.")
+    .test(code);
+
+  test.done();
+};
+
+exports.testES6UnusedExports = function (test) {
+  var code = [
+    "export {",
+    "  varDefinedLater,",
+    "  letDefinedLater,",
+    "  constDefinedLater",
+    "};",
+    "var unusedGlobalVar = 41;",
+    "let unusedGlobalLet = 41;",
+    "const unusedGlobalConst = 41;",
+    "function unusedGlobalFunc() {}",
+    "class unusedGlobalClass {}",
+    "export let globalExportLet = 42;",
+    "export var globalExportVar = 43;",
+    "export const globalExportConst = 44;",
+    "export function unusedFn() {}",
+    "export class unusedClass {}",
+    "export {",
+    "  unusedGlobalVar,",
+    "  unusedGlobalLet,",
+    "  unusedGlobalConst,",
+    "  unusedGlobalFunc,",
+    "  unusedGlobalClass",
+    "};",
+    "var varDefinedLater = 60;",
+    "let letDefinedLater = 61;",
+    "const constDefinedLater = 62;"
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true, unused: true });
+
+  test.done();
+};
+
+exports.testES6BlockExports = function (test) {
+  var code = [
+    "var broken = true;",
+    "var broken2 = false;",
+    "function funcScope() {",
+    "  export let exportLet = 42;",
+    "  export var exportVar = 43;",
+    "  export const exportConst = 44;",
+    "  export function exportedFn() {}",
+    "  export {",
+    "    broken,",
+    "    broken2",
+    "  };",
+    "}",
+    "if (true) {",
+    "  export let conditionalExportLet = 42;",
+    "  export var conditionalExportVar = 43;",
+    "  export const conditionalExportConst = 44;",
+    "  export function conditionalExportedFn() {}",
+    "  export {",
+    "    broken,",
+    "    broken2",
+    "  };",
+    "}",
+    "funcScope();"
+  ];
+
+  TestRun(test)
+    .addError(1, "'broken' is defined but never used.")
+    .addError(2, "'broken2' is defined but never used.")
+    .addError(4, "Export declaration must be in global scope.")
+    .addError(5, "Export declaration must be in global scope.")
+    .addError(6, "Export declaration must be in global scope.")
+    .addError(7, "Export declaration must be in global scope.")
+    .addError(8, "Export declaration must be in global scope.")
+    .addError(14, "Export declaration must be in global scope.")
+    .addError(15, "Export declaration must be in global scope.")
+    .addError(16, "Export declaration must be in global scope.")
+    .addError(17, "Export declaration must be in global scope.")
+    .addError(17, "Function declarations should not be placed in blocks. Use a function expression or move the statement to the top of the outer function.")
+    .addError(18, "Export declaration must be in global scope.")
+    .test(code, { esnext: true, unused: true });
+
+  test.done();
+};
+
+exports.testStrictDirectiveASI = function (test) {
+  var options = { strict: true, asi: true, globalstrict: true };
+
+  TestRun(test, 1)
+    .test("'use strict'\nfunction fn() {}\nfn();", options);
+
+  TestRun(test, 2)
+    .test("'use strict'\n;function fn() {}\nfn();", options);
+
+  TestRun(test, 3)
+    .test("'use strict';function fn() {} fn();", options);
+
+  TestRun(test, 4)
+    .addError(1, "Missing semicolon.")
+    .test("'use strict'\n(function fn() {})();", options);
+
+  TestRun(test, 5)
+    .test("'use strict'\n[0] = '6';", options);
+
+  TestRun(test, 6)
+    .addError(1, "Missing semicolon.")
+    .addError(1, "Expected an identifier and instead saw ','.")
+    .addError(1, "Expected an assignment or function call and instead saw an expression.")
+    .test("'use strict',function fn() {}\nfn();", options);
+
+  TestRun(test, 7)
+    .test("'use strict'.split(' ');", options);
+
+  TestRun(test, 8)
+    .addError(1, "Missing \"use strict\" statement.")
+    .test("(function() { var x; \"use strict\"; return x; }());", { strict: true, expr: true });
+
+  test.done();
+};
+
+exports.dereferenceDelete = function (test) {
+  TestRun(test)
+    .addError(1, "Expected an identifier and instead saw '.'.")
+    .addError(1, "Missing semicolon.")
+    .test("delete.foo();");
+
+  test.done();
+};
+
+exports.trailingCommaInObjectBindingPattern = function (test) {
+  var code = [
+    'function fn(O) {',
+    '  var {a, b, c,} = O;',
+    '}',
+    'fn({ a: 1, b: 2, c: 3 });'
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.trailingCommaInObjectBindingPatternParameters = function (test) {
+  var code = [
+    'function fn({a, b, c,}) { }',
+    'fn({ a: 1, b: 2, c: 3 });'
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.trailingCommaInArrayBindingPattern = function (test) {
+  var code = [
+    'function fn(O) {',
+    '  var [a, b, c,] = O;',
+    '}',
+    'fn([1, 2, 3]);'
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.trailingCommaInArrayBindingPatternParameters = function (test) {
+  var code = [
+    'function fn([a, b, c,]) { }',
+    'fn([1, 2, 3]);'
+  ];
+
+  TestRun(test)
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.commaAfterRestElementInArrayBindingPattern = function (test) {
+  var code = [
+    'function fn(O) {',
+    '  var [a, b, ...c,] = O;',
+    '  var [...d,] = O;',
+    '}',
+    'fn([1, 2, 3]);'
+  ];
+
+  TestRun(test)
+    .addError(2, "Invalid element after rest element.")
+    .addError(3, "Invalid element after rest element.")
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.commaAfterRestElementInArrayBindingPatternParameters = function (test) {
+  var code = [
+    'function fn([a, b, ...c,]) { }',
+    'function fn2([...c,]) { }',
+    'fn([1, 2, 3]);',
+    'fn2([1,2,3]);'
+  ];
+
+  TestRun(test)
+    .addError(1, "Invalid element after rest element.")
+    .addError(2, "Invalid element after rest element.")
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.commaAfterRestParameter = function (test) {
+  var code = [
+    'function fn(a, b, ...c, d) { }',
+    'function fn2(...a, b) { }',
+    'fn(1, 2, 3);',
+    'fn2(1, 2, 3);'
+  ];
+
+  TestRun(test)
+    .addError(1, "Invalid parameter after rest parameter.")
+    .addError(2, "Invalid parameter after rest parameter.")
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.extraRestOperator = function (test) {
+  var code = [
+    'function fn([a, b, ......c]) { }',
+    'function fn2([......c]) { }',
+    'function fn3(a, b, ......) { }',
+    'function fn4(......) { }',
+    'var [......a] = [1, 2, 3];',
+    'var [a, b, ... ...c] = [1, 2, 3];',
+    'var arrow = (......a) => a;',
+    'var arrow2 = (a, b, ......c) => c;',
+    'var arrow3 = ([......a]) => a;',
+    'var arrow4 = ([a, b, ......c]) => c;',
+    'fn([1, 2, 3]);',
+    'fn2([1, 2, 3]);',
+    'fn3(1, 2, 3);',
+    'fn4(1, 2, 3);',
+    'arrow(1, 2, 3);',
+    'arrow2(1, 2, 3);',
+    'arrow3([1, 2, 3]);',
+    'arrow4([1, 2, 3]);',
+  ];
+
+  TestRun(test)
+    .addError(1, "Unexpected '...'.")
+    .addError(2, "Unexpected '...'.")
+    .addError(3, "Unexpected '...'.")
+    .addError(4, "Unexpected '...'.")
+    .addError(5, "Unexpected '...'.")
+    .addError(6, "Unexpected '...'.")
+    .addError(7, "Unexpected '...'.")
+    .addError(8, "Unexpected '...'.")
+    .addError(9, "Unexpected '...'.")
+    .addError(10, "Unexpected '...'.")
+    .test(code, { esnext: true });
+
+  test.done();
+};
+
+
+exports.restOperatorWithoutIdentifier = function (test) {
+  var code = [
+    'function fn([a, b, ...]) { }',
+    'function fn2([...]) { }',
+    'function fn3(a, b, ...) { }',
+    'function fn4(...) { }',
+    'var [...] = [1, 2, 3];',
+    'var [a, b, ...] = [1, 2, 3];',
+    'var arrow = (...) => void 0;',
+    'var arrow2 = (a, b, ...) => a;',
+    'var arrow3 = ([...]) => void 0;',
+    'var arrow4 = ([a, b, ...]) => a;',
+    'fn([1, 2, 3]);',
+    'fn2([1, 2, 3]);',
+    'fn3(1, 2, 3);',
+    'fn3(1, 2, 3);',
+    'arrow(1, 2, 3);',
+    'arrow2(1, 2, 3);',
+    'arrow3([1, 2, 3]);',
+    'arrow4([1, 2, 3]);'
+  ];
+
+  TestRun(test)
+    .addError(1, "Unexpected '...'.")
+    .addError(2, "Unexpected '...'.")
+    .addError(3, "Unexpected '...'.")
+    .addError(4, "Unexpected '...'.")
+    .addError(5, "Unexpected '...'.")
+    .addError(6, "Unexpected '...'.")
+    .addError(7, "Unexpected '...'.")
+    .addError(8, "Unexpected '...'.")
+    .addError(9, "Unexpected '...'.")
+    .addError(10, "Unexpected '...'.")
+    .test(code, { esnext: true });
+
   test.done();
 };

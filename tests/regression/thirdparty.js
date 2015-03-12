@@ -7,10 +7,13 @@ exports["Backbone.js 0.5.3"] = function (test) {
   var src = fs.readFileSync(__dirname + '/libs/backbone.js', 'utf8');
 
   TestRun(test)
+    .addError(32, "Unnecessary grouping operator.")
+    .addError(784, "Unnecessary grouping operator.")
+    .addError(864, "Unnecessary grouping operator.")
     .addError(685, "Missing '()' invoking a constructor.")
     .addError(764, "Use '===' to compare with '0'.")
     .addError(859, "Use '!==' to compare with '0'.")
-    .test(src, { expr: true, eqnull: true, boss: true, regexdash: true });
+    .test(src, { expr: true, eqnull: true, boss: true, regexdash: true, singleGroups: true });
 
   test.done();
 };
@@ -87,7 +90,6 @@ exports.prototype_1_7 = function (test) {
     .addError(2990, "'tagName' used out of scope.")
     .addError(3844, "'positionedOffset' is a function.")
     .addError(3860, "'cumulativeOffset' is a function.")
-    .addError(3987, "You might be leaking a variable (context) here.")
     .addError(4036, "'ret' is already defined.")
     .addError(4072, "'cur' used out of scope.")
     .addError(4085, "'i' is already defined.")
@@ -95,9 +97,7 @@ exports.prototype_1_7 = function (test) {
     .addError(4290, "'i' is already defined.")
     .addError(4290, "'l' is already defined.")
     .addError(4291, "'elem' is already defined.")
-    .addError(4308, "You might be leaking a variable (part) here.")
     .addError(4312, "'nodeCheck' used out of scope.")
-    .addError(4318, "You might be leaking a variable (part) here.")
     .addError(4322, "'nodeCheck' used out of scope.")
     .addError(4520, "'i' is already defined.")
     .addError(4538, "Expected a 'break' statement before 'case'.")
@@ -185,7 +185,7 @@ exports.json2 = function (test) {
   TestRun(test)
     .addError(177, "'key' is defined but never used.")
     .addError(191, "'key' is defined but never used.")
-    .test(src, { undef: true, unused: true, laxbreak: true }, { JSON: true });
+    .test(src, { singleGroups: true, undef: true, unused: true, laxbreak: true, predef: ["-JSON"] }, { JSON: true });
 
   test.done();
 };

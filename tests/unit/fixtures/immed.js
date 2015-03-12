@@ -29,3 +29,11 @@ var g = (function () {
 var h = (function () {
     return;
 }.call(null, true, undefined));
+
+// gh-1737: Necessary wrapping function in parens is marked as unnecessary by
+// the immed option
+var i = (function() {
+    return;
+}).should.not['throw']();
+
+(function() {})[i ? 'call' : 'apply']();
